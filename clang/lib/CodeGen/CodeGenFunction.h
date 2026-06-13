@@ -5558,7 +5558,7 @@ public:
                     llvm::iterator_range<CallExpr::const_arg_iterator> ArgRange,
                     AbstractCallee AC = AbstractCallee(),
                     unsigned ParamsToSkip = 0,
-                    EvaluationOrder Order = EvaluationOrder::Default);
+                    EvaluationOrder Order = EvaluationOrder::Default, const Expr *Callee = nullptr);
 
   /// EmitPointerWithAlignment - Given an expression with a pointer type,
   /// emit the value and compute our best estimate of the alignment of the

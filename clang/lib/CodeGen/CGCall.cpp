@@ -4864,7 +4864,7 @@ static bool isObjCMethodWithTypeParams(const ObjCMethodDecl *method) {
 void CodeGenFunction::EmitCallArgs(
     CallArgList &Args, PrototypeWrapper Prototype,
     llvm::iterator_range<CallExpr::const_arg_iterator> ArgRange,
-    AbstractCallee AC, unsigned ParamsToSkip, EvaluationOrder Order) {
+    AbstractCallee AC, unsigned ParamsToSkip, EvaluationOrder Order, const Expr *Callee) {
   SmallVector<QualType, 16> ArgTypes;
 
   assert((ParamsToSkip == 0 || Prototype.P) &&
@@ -4937,11 +4937,35 @@ void CodeGenFunction::EmitCallArgs(
           ? Order == EvaluationOrder::ForceLeftToRight
           : Order != EvaluationOrder::ForceRightToLeft;
 
+
+  auto GetPassObjectSizeAttrFromCallee = [&](unsigned I) -> PassObjectSizeAttr* {
+    if (auto *DRE = dyn_cast<DeclRefExpr>(Callee->IgnoreParenImpCasts())) {
+      if (auto *PVD = dyn_cast<ParmVarDecl>(DRE->getDecl())) {
+        auto *TSI = PVD->getTypeSourceInfo();
+        if (auto PTL = TSI->getTypeLoc().getAs<PointerTypeLoc>()) {
+          if (auto ParamTL = PTL.getPointeeLoc().getAs<ParenTypeLoc>()) {
+            if (auto FPTL = ParamTL.getInnerLoc().getAs<FunctionProtoTypeLoc>()) {
+              if (I < FPTL.getNumParams()) {
+                return FPTL.getParam(I)->getAttr<PassObjectSizeAttr>();
+              }
+            }
+          }
+        }
+      }
+    }
+    return nullptr;
+  };
+
   auto MaybeEmitImplicitObjectSize = [&](unsigned I, const Expr *Arg,
                                          RValue EmittedArg) {
-    if (!AC.hasFunctionDecl() || I >= AC.getNumParams())
-      return;
-    auto *PS = AC.getParamDecl(I)->getAttr<PassObjectSizeAttr>();
+
+    PassObjectSizeAttr *PS = nullptr;
+    if (AC.hasFunctionDecl() && I < AC.getNumParams())
+      PS = AC.getParamDecl(I)->getAttr<PassObjectSizeAttr>();
+    else {
+      PS = GetPassObjectSizeAttrFromCallee(I);
+    }
+    llvm::errs() << PS << "\n";
     if (PS == nullptr)
       return;
 
